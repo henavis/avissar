@@ -129,10 +129,13 @@ if file:
     manual_points=[]
     if canvas_result.json_data is not None:
         for obj in canvas_result.json_data["objects"]:
-            if obj["type"]=="path":
-                for (x,y) in obj["path"]:
-                    if isinstance(x,(int,float)) and isinstance(y,(int,float)):
-                        manual_points.append((x/dpi,y/dpi))
+            if obj["type"]=="path" and "path" in obj:
+                for step in obj["path"]:
+                    if len(step) >= 3:
+                        _, x, y = step[:3]
+                        if isinstance(x,(int,float)) and isinstance(y,(int,float)):
+                            manual_points.append((x/dpi,y/dpi))
+
 
     all_points = auto_points + manual_points
 
@@ -146,5 +149,6 @@ if file:
     if st.button("Export CSV"):
         fn = export_csv(all_points)
         st.download_button("Download CSV",open(fn,"rb"),file_name=fn)
+
 
 
