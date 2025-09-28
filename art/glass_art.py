@@ -98,8 +98,8 @@ if file:
     gray_src = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
     dpi = st.sidebar.slider("DPI (px/mm)",2,20,5)
-    cell_size_mm = st.sidebar.slider("Cell Size (mm)",1,15,3)
-    max_dots = st.sidebar.slider("Max dots per cell",1,80,15)
+    cell_size_mm = st.sidebar.slider("Cell Size (mm)",3,15,3)
+    max_dots = st.sidebar.slider("Max dots per cell",1,100,15)
     sensitivity = st.sidebar.slider("Sensitivity",0.2,4.0,1.0,0.1)
     flip_y = st.sidebar.checkbox("Flip Y",False)
     fix_seed = st.sidebar.checkbox("Fix Random Seed",False)
@@ -146,3 +146,4 @@ if file:
     if st.button("Export CSV"):
         fn = export_csv(all_points)
         st.download_button("Download CSV",open(fn,"rb"),file_name=fn)
+
