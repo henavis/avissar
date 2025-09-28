@@ -97,8 +97,8 @@ if file:
     img_bgr = cv2.imdecode(file_bytes, 1)
     gray_src = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
-    dpi = st.sidebar.slider("DPI (px/mm)",2,20,5)
-    cell_size_mm = st.sidebar.slider("Cell Size (mm)",3,15,3)
+    dpi = st.sidebar.slider("DPI (px/mm)",2,20,3)
+    cell_size_mm = st.sidebar.slider("Cell Size (mm)",1,15,2)
     max_dots = st.sidebar.slider("Max dots per cell",1,100,15)
     sensitivity = st.sidebar.slider("Sensitivity",0.2,4.0,1.0,0.1)
     flip_y = st.sidebar.checkbox("Flip Y",False)
@@ -109,9 +109,9 @@ if file:
     stipple_img, auto_points = stipple_art_continuous(gray_fit,dpi,cell_size_mm,max_dots,sensitivity,seed,flip_y)
 
     col1,col2,col3 = st.columns(3)
-    with col1: st.image(cv2.cvtColor(img_bgr,cv2.COLOR_BGR2RGB), caption="Original")
+    with col1: st.image(cv2.cvtColor(img_bgr,cv2.COLOR_BGR2RGB), caption="Original", clamp=True)
     with col2: st.image(gray_fit, caption="Gray Fit", clamp=True)
-    with col3: st.image(stipple_img, caption="Stipple Auto", clamp=True)
+    with col3: st.image(stipple_img, caption="Stipple Auto")
 
     st.subheader("✏️ עריכה ידנית (הוסף/מחק נקודות)")
     canvas_result = st_canvas(
@@ -146,4 +146,5 @@ if file:
     if st.button("Export CSV"):
         fn = export_csv(all_points)
         st.download_button("Download CSV",open(fn,"rb"),file_name=fn)
+
 
