@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import cv2, random, datetime
+from streamlit_image_coordinates import streamlit_image_coordinates
 
 # ===== פרמטרים כלליים =====
 WIDTH_MM, HEIGHT_MM = 700, 500
@@ -59,6 +60,7 @@ def stipple(gray, dpi=5, cell_size_mm=3, max_dots=15, sens=1.0, seed=None):
                 pts.append(((x+rx)/dpi,(y+ry)/dpi))
     return pts
 
+# --- רסטר מתצוגה ---
 def raster_from_points(points, dpi, h, w):
     img = np.zeros((h,w), dtype=np.uint8)
     r = max(1, int(dpi*DOT_DIAMETER_MM/2))
@@ -68,6 +70,7 @@ def raster_from_points(points, dpi, h, w):
             cv2.circle(img, (cx,cy), r, 255, -1)
     return img
 
+# --- ייצוא SVG ---
 def export_svg(points):
     ts=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     fn=f"stipple_{WIDTH_MM}x{HEIGHT_MM}_{ts}.svg"
@@ -83,7 +86,7 @@ def export_svg(points):
 # Streamlit UI
 # ========================
 st.set_page_config(layout="wide")
-st.title("🎨 Stipple Art – Preview עם ציור/מחיקה ועיבודים")
+st.title("🎨 Stipple Art – הוספה/מחיקה עם קליק")
 
 file = st.file_uploader("📂 העלה תמונה", type=["jpg","jpeg","png"])
 if not file:
@@ -107,6 +110,8 @@ gamma_val = st.sidebar.slider("Gamma",0.5,2.5,1.0,0.05)
 blur_sigma = st.sidebar.slider("Blur σ",0.0,5.0,0.0,0.1)
 sharpen_amt = st.sidebar.slider("Sharpen",0.0,2.0,0.0,0.1)
 
+mode = st.sidebar.radio("מצב",["Add","Erase"])
+
 # ===== עיבוד תמונה =====
 gray_fit=resize_keep_aspect(gray_src,WIDTH_MM,HEIGHT_MM,dpi)
 proc = adjust_brightness_contrast(gray_fit, brightness, contrast)
@@ -114,46 +119,38 @@ proc = adjust_gamma(proc, gamma_val)
 if blur_sigma>0: proc=apply_blur(proc, blur_sigma)
 if sharpen_amt>0: proc=apply_sharpen(proc, sharpen_amt, sigma=1.0)
 
-# ===== יצירת נקודות אוטומטיות =====
+# ===== נקודות אוטומטיות =====
 auto_points=stipple(proc,dpi,cell,maxdots,sens,seed=42)
 
-# === Session state לנקודות ידניות ומחיקות ===
+# === Session state לנקודות ידניות ===
 if "manual_points" not in st.session_state:
     st.session_state.manual_points=[]
-if "erase_points" not in st.session_state:
-    st.session_state.erase_points=[]
-
-# ===== כפתורים להוספה/מחיקה =====
-col1,col2=st.columns(2)
-with col1:
-    add_x = st.number_input("X (mm) להוספה", float(0), float(WIDTH_MM), float(0), step=1.0)
-    add_y = st.number_input("Y (mm) להוספה", float(0), float(HEIGHT_MM), float(0), step=1.0)
-    if st.button("➕ הוסף נקודה"):
-        st.session_state.manual_points.append((add_x,add_y))
-with col2:
-    del_x = st.number_input("X (mm) למחיקה", float(0), float(WIDTH_MM), float(0), step=1.0)
-    del_y = st.number_input("Y (mm) למחיקה", float(0), float(HEIGHT_MM), float(0), step=1.0)
-    if st.button("❌ מחק נקודה קרובה"):
-        st.session_state.erase_points.append((del_x,del_y))
-
-# ===== מיזוג נקודות =====
-all_points = auto_points + st.session_state.manual_points
-
-final_points=[]
-for (x,y) in all_points:
-    keep=True
-    for (ex,ey) in st.session_state.erase_points:
-        if (x-ex)**2+(y-ey)**2 < (DOT_DIAMETER_MM**2):
-            keep=False; break
-    if keep: final_points.append((x,y))
 
 # ===== Preview =====
-preview_img = raster_from_points(final_points, dpi, proc.shape[0], proc.shape[1])
-st.image(preview_img, caption="Preview עם ציור/מחיקה", clamp=True, use_column_width=True)
+all_points = auto_points + st.session_state.manual_points
+preview_img = raster_from_points(all_points, dpi, proc.shape[0], proc.shape[1])
 
-st.caption(f"Auto: {len(auto_points)} | Manual: {len(st.session_state.manual_points)} | After erase: {len(final_points)}")
+# הצגת תמונה עם אפשרות קליק
+coords = streamlit_image_coordinates(preview_img, key="clickable_preview")
+
+if coords is not None:
+    cx_mm, cy_mm = coords["x"]/dpi, coords["y"]/dpi
+    if mode=="Add":
+        st.session_state.manual_points.append((cx_mm, cy_mm))
+    elif mode=="Erase":
+        st.session_state.manual_points = [
+            (x,y) for (x,y) in st.session_state.manual_points
+            if (x-cx_mm)**2+(y-cy_mm)**2 > (DOT_DIAMETER_MM**2)
+        ]
+
+# עדכון אחרי פעולה
+all_points = auto_points + st.session_state.manual_points
+preview_img = raster_from_points(all_points, dpi, proc.shape[0], proc.shape[1])
+st.image(preview_img, caption="Preview עם קליקים", clamp=True, use_column_width=True)
+
+st.caption(f"Auto: {len(auto_points)} | Manual: {len(st.session_state.manual_points)} | Total: {len(all_points)}")
 
 # ===== ייצוא =====
 if st.button("Export SVG"):
-    fn=export_svg(final_points)
+    fn=export_svg(all_points)
     st.download_button("Download SVG", open(fn,"rb"), file_name=fn)
