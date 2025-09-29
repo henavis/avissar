@@ -21,6 +21,28 @@ def resize_keep_aspect(image, width_mm=WIDTH_MM, height_mm=HEIGHT_MM, dpi=5):
     canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
     return canvas
 
+# --- עיבודי תמונה ---
+def adjust_brightness_contrast(img, brightness=0, contrast=1.0):
+    res = img.astype(np.float32) * contrast + brightness
+    return np.clip(res, 0, 255).astype(np.uint8)
+
+def adjust_gamma(img, gamma=1.0):
+    inv = 1.0 / max(gamma, 0.01)
+    norm = img.astype(np.float32) / 255.0
+    return np.clip((norm**inv)*255, 0, 255).astype(np.uint8)
+
+def apply_blur(img, sigma=0.0):
+    if sigma <= 0: return img
+    k = int(max(3, 2*round(3*sigma)+1))
+    return cv2.GaussianBlur(img, (k,k), sigma)
+
+def apply_sharpen(img, amount=0.0, sigma=1.0):
+    if amount <= 0: return img
+    blur = apply_blur(img, sigma)
+    sharp = img.astype(np.float32) + amount*(img.astype(np.float32)-blur.astype(np.float32))
+    return np.clip(sharp, 0, 255).astype(np.uint8)
+
+# --- יצירת נקודות Stipple ---
 def stipple(gray, dpi=5, cell_size_mm=3, max_dots=15, sens=1.0, seed=None):
     if seed: random.seed(seed)
     h,w=gray.shape; pts=[]
@@ -61,7 +83,7 @@ def export_svg(points):
 # Streamlit UI
 # ========================
 st.set_page_config(layout="wide")
-st.title("🎨 Stipple Art – ציור/מחיקה על Preview")
+st.title("🎨 Stipple Art – Preview עם ציור/מחיקה ועיבודים")
 
 file = st.file_uploader("📂 העלה תמונה", type=["jpg","jpeg","png"])
 if not file:
@@ -72,16 +94,30 @@ img_bgr = cv2.imdecode(file_bytes, 1)
 gray_src = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
 # ===== Sidebar =====
+st.sidebar.header("📐 פרמטרי Stipple")
 dpi = st.sidebar.slider("DPI",2,20,5)
 cell=st.sidebar.slider("Cell Size mm",1,15,3)
 maxdots=st.sidebar.slider("Max dots",1,80,15)
 sens=st.sidebar.slider("Sensitivity",0.2,4.0,1.0,0.1)
 
-# ===== יצירת נקודות אוטומטיות =====
-gray_fit=resize_keep_aspect(gray_src,WIDTH_MM,HEIGHT_MM,dpi)
-auto_points=stipple(gray_fit,dpi,cell,maxdots,sens,seed=42)
+st.sidebar.header("🎚️ עיבודי תמונה")
+brightness = st.sidebar.slider("Brightness",-100,100,0)
+contrast = st.sidebar.slider("Contrast",0.5,2.0,1.0,0.05)
+gamma_val = st.sidebar.slider("Gamma",0.5,2.5,1.0,0.05)
+blur_sigma = st.sidebar.slider("Blur σ",0.0,5.0,0.0,0.1)
+sharpen_amt = st.sidebar.slider("Sharpen",0.0,2.0,0.0,0.1)
 
-# === אחסון נקודות ידניות במחסן session_state ===
+# ===== עיבוד תמונה =====
+gray_fit=resize_keep_aspect(gray_src,WIDTH_MM,HEIGHT_MM,dpi)
+proc = adjust_brightness_contrast(gray_fit, brightness, contrast)
+proc = adjust_gamma(proc, gamma_val)
+if blur_sigma>0: proc=apply_blur(proc, blur_sigma)
+if sharpen_amt>0: proc=apply_sharpen(proc, sharpen_amt, sigma=1.0)
+
+# ===== יצירת נקודות אוטומטיות =====
+auto_points=stipple(proc,dpi,cell,maxdots,sens,seed=42)
+
+# === Session state לנקודות ידניות ומחיקות ===
 if "manual_points" not in st.session_state:
     st.session_state.manual_points=[]
 if "erase_points" not in st.session_state:
@@ -90,20 +126,19 @@ if "erase_points" not in st.session_state:
 # ===== כפתורים להוספה/מחיקה =====
 col1,col2=st.columns(2)
 with col1:
-    add_x = st.number_input("X (mm) להוספה",0.0,WIDTH_MM,0.0,step=1.0)
-    add_y = st.number_input("Y (mm) להוספה",0.0,HEIGHT_MM,0.0,step=1.0)
+    add_x = st.number_input("X (mm) להוספה", float(0), float(WIDTH_MM), float(0), step=1.0)
+    add_y = st.number_input("Y (mm) להוספה", float(0), float(HEIGHT_MM), float(0), step=1.0)
     if st.button("➕ הוסף נקודה"):
         st.session_state.manual_points.append((add_x,add_y))
 with col2:
-    del_x = st.number_input("X (mm) למחיקה",0.0,WIDTH_MM,0.0,step=1.0)
-    del_y = st.number_input("Y (mm) למחיקה",0.0,HEIGHT_MM,0.0,step=1.0)
+    del_x = st.number_input("X (mm) למחיקה", float(0), float(WIDTH_MM), float(0), step=1.0)
+    del_y = st.number_input("Y (mm) למחיקה", float(0), float(HEIGHT_MM), float(0), step=1.0)
     if st.button("❌ מחק נקודה קרובה"):
         st.session_state.erase_points.append((del_x,del_y))
 
 # ===== מיזוג נקודות =====
 all_points = auto_points + st.session_state.manual_points
 
-# מחיקה: מסירים נקודות קרובות ל־erase_points
 final_points=[]
 for (x,y) in all_points:
     keep=True
@@ -113,7 +148,7 @@ for (x,y) in all_points:
     if keep: final_points.append((x,y))
 
 # ===== Preview =====
-preview_img = raster_from_points(final_points, dpi, gray_fit.shape[0], gray_fit.shape[1])
+preview_img = raster_from_points(final_points, dpi, proc.shape[0], proc.shape[1])
 st.image(preview_img, caption="Preview עם ציור/מחיקה", clamp=True, use_column_width=True)
 
 st.caption(f"Auto: {len(auto_points)} | Manual: {len(st.session_state.manual_points)} | After erase: {len(final_points)}")
