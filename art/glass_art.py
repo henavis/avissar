@@ -1,4 +1,3 @@
-pip install streamlit opencv-python-headless numpy pillow streamlit-drawable-canvas
 import streamlit as st
 import numpy as np
 import cv2, random, datetime, csv, math
@@ -358,3 +357,4 @@ with cC:
         fn = export_csv(all_points, flip_y=flip_y)
         st.success(f"נשמר: {fn}")
         st.download_button("Download CSV", open(fn, "rb"), file_name=fn)
+
