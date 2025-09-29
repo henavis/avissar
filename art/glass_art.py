@@ -10,7 +10,7 @@ from streamlit_drawable_canvas import st_canvas
 # -----------------------
 WIDTH_MM, HEIGHT_MM = 700, 500
 DOT_DIAMETER_MM = 1.0
-USE_BASE64_BG = True   # 👈 שנה ל-True אם אופציית NumPy לא עובדת ב-Streamlit Cloud
+USE_BASE64_BG = False   # 👈 שנה ל-True אם אופציית NumPy לא עובדת ב-Streamlit Cloud
 
 # -----------------------
 # פונקציות עזר
@@ -120,4 +120,3 @@ if file:
     if st.button("Export SVG"):
         fn=export_svg(auto_points)
         st.download_button("Download SVG",open(fn,"rb"),file_name=fn)
-
