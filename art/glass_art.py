@@ -1,20 +1,11 @@
 import streamlit as st
 import numpy as np
-import cv2, random, datetime, csv, base64
-from io import BytesIO
-from PIL import Image
+import cv2, random, datetime, csv
 from streamlit_drawable_canvas import st_canvas
 
-# -----------------------
-# הגדרות כלליות
-# -----------------------
 WIDTH_MM, HEIGHT_MM = 700, 500
 DOT_DIAMETER_MM = 1.0
-USE_BASE64_BG = False   # 👈 שנה ל-True אם אופציית NumPy לא עובדת ב-Streamlit Cloud
 
-# -----------------------
-# פונקציות עזר
-# -----------------------
 def resize_keep_aspect(image, width_mm=WIDTH_MM, height_mm=HEIGHT_MM, dpi=5):
     target_w, target_h = int(width_mm*dpi), int(height_mm*dpi)
     ih, iw = image.shape[:2]
@@ -46,21 +37,6 @@ def stipple(gray, dpi=5, cell_size_mm=3, max_dots=15, sens=1.0, seed=None):
                 pts.append(((x+rx)/dpi,(y+ry)/dpi))
     return pts
 
-def raster_from_points(points, dpi, h, w):
-    img=np.zeros((h,w),dtype=np.uint8)
-    r=int(dpi*0.5)
-    for (x_mm,y_mm) in points:
-        x=int(x_mm*dpi); y=int(y_mm*dpi)
-        if 0<=x<w and 0<=y<h:
-            cv2.circle(img,(x,y),r,255,-1)
-    return img
-
-def pil_to_data_url(pil_img):
-    buf = BytesIO()
-    pil_img.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode()
-    return "data:image/png;base64," + b64
-
 def export_svg(points):
     ts=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     fn=f"stipple_{WIDTH_MM}x{HEIGHT_MM}_{ts}.svg"
@@ -68,15 +44,12 @@ def export_svg(points):
         f.write(f'<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH_MM}mm" height="{HEIGHT_MM}mm" viewBox="0 0 {WIDTH_MM} {HEIGHT_MM}">\n')
         f.write(f'<rect width="{WIDTH_MM}" height="{HEIGHT_MM}" fill="black"/>\n')
         for (x,y) in points:
-            f.write(f'<circle cx="{x:.3f}" cy="{y:.3f}" r="0.5" fill="white"/>\n')
+            f.write(f'<circle cx="{x:.3f}" cy="{y:.3f}" r="{DOT_DIAMETER_MM/2}" fill="white"/>\n')
         f.write("</svg>")
     return fn
 
-# -----------------------
-# Streamlit UI
-# -----------------------
 st.set_page_config(layout="wide")
-st.title("🎨 Stipple Art – עם ציור/מחיקה")
+st.title("🎨 Stipple Art – Cloud Friendly")
 
 file = st.file_uploader("📂 העלה תמונה", type=["jpg","jpeg","png"])
 if file:
@@ -91,32 +64,27 @@ if file:
 
     gray_fit=resize_keep_aspect(gray_src,WIDTH_MM,HEIGHT_MM,dpi)
     auto_points=stipple(gray_fit,dpi,cell,maxdots,sens,seed=42)
-    stipple_img=raster_from_points(auto_points,dpi,gray_fit.shape[0],gray_fit.shape[1])
 
-    # רקע לקנבס
-    bg_rgb=np.dstack([stipple_img,stipple_img,stipple_img]).astype(np.uint8)
+    # מציגים את התמונה האוטומטית – לא כרקע לקנבס
+    st.image(gray_fit, caption="תמונה בגווני אפור מותאמת", clamp=True, use_column_width=True)
 
-    if USE_BASE64_BG:
-        bg_pil = Image.fromarray(bg_rgb,"RGB")
-        bg_source = pil_to_data_url(bg_pil)
-    else:
-        bg_source = bg_rgb
-
-    st.subheader("🖌️ קנבס אינטראקטיבי")
+    # קנבס ריק לציור נקודות/מחיקה
+    st.subheader("🖌️ קנבס ציור/מחיקה")
     canvas_res = st_canvas(
         fill_color="rgba(255,255,255,1)",
         stroke_width=3,
         stroke_color="white",
-        background_color="black",
-        background_image=bg_source,   # 👈 כאן נבחר המקור
+        background_color="black",   # ❌ אין background_image
         update_streamlit=True,
-        width=stipple_img.shape[1],
-        height=stipple_img.shape[0],
+        width=gray_fit.shape[1],
+        height=gray_fit.shape[0],
         drawing_mode=st.selectbox("מצב ציור",["transform","circle","freedraw","erase"]),
         key="canvas"
     )
 
-    st.subheader("📥 ייצוא")
+    # כאן אפשר להוסיף איסוף של נקודות מה-canvas_res.json_data
+    # ולחבר אותן עם auto_points -> all_points
+
     if st.button("Export SVG"):
         fn=export_svg(auto_points)
         st.download_button("Download SVG",open(fn,"rb"),file_name=fn)
