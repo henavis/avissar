@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>Stipple Art Web</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, Arial;
+      margin: 20px;
+      background-color: #fafafa;
+      color: #222;
+    }
+    fieldset {
+      margin-bottom: 16px;
+      border-radius: 8px;
+      padding: 10px 20px;
+    }
+    label {
+      display: block;
+      margin: 6px 0;
+    }
+    .row {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .col {
+      flex: 1 1 320px;
+      min-width: 280px;
+    }
+    img {
+      max-width: 100%;
+      border: 1px solid #ccc;
+      margin-top: 10px;
+    }
+    .btn {
+      padding: 10px 14px;
+      border: none;
+      background: #111;
+      color: #fff;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .btn:hover { background: #444; }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    h1 { color: #333; }
+  </style>
+</head>
+
+<body>
+  <h1>🎨 Stipple Art Generator (SVG / CSV / GCODE)</h1>
+
+  <form id="frm">
+    <fieldset>
+      <legend>1️⃣ העלאת תמונה</legend>
+      <input type="file" name="image" id="image" accept="image/*" required />
+    </fieldset>
+
+    <fieldset class="row">
+      <legend>2️⃣ הגדרות כלליות</legend>
+      <div class="col">
+        <label>DPI (px/mm)
+          <input type="number" name="dpi" value="5" min="2" max="20" step="1">
+        </label>
+        <label>Cell Size (mm)
+          <input type="number" name="cell_size_mm" value="3" min="1" max="20">
+        </label>
+        <label>Max Dots / Cell
+          <input type="number" name="max_dots" value="60" min="1" max="200">
+        </label>
+        <label>Sensitivity
+          <input type="number" name="sensitivity" value="2.0" min="0.2" max="4.0" step="0.1">
+        </label>
+        <label>Min Dia (mm)
+          <input type="number" name="min_dia_mm" value="0.2" min="0.05" max="2" step="0.05">
+        </label>
+        <label>Max Dia (mm)
+          <input type="number" name="max_dia_mm" value="1.5" min="0.1" max="4" step="0.1">
+        </label>
+        <label><input type="checkbox" name="flip_y"> Flip Y</label>
+        <label><input type="checkbox" name="fix_seed" checked> Fix Random Seed</label>
+      </div>
+
+      <div class="col">
+        <h4>עיבוד תמונה</h4>
+        <label>Brightness
+          <input type="number" name="brightness" value="0" min="-100" max="100">
+        </label>
+        <label>Contrast
+          <input type="number" name="contrast" value="1.0" step="0.05" min="0.5" max="2.5">
+        </label>
+        <label>Gamma
+          <input type="number" name="gamma_val" value="1.0" step="0.05" min="0.5" max="2.5">
+        </label>
+        <label>CLAHE Clip
+          <input type="number" name="clahe_clip" value="0.0" step="0.1" min="0.0" max="4.0">
+        </label>
+        <label>CLAHE Tile
+          <input type="number" name="clahe_tile" value="8" step="2" min="2" max="32">
+        </label>
+        <label>Blur σ
+          <input type="number" name="blur_sigma" value="0.0" step="0.1" min="0.0" max="5.0">
+        </label>
+        <label>Sharpen Amount
+          <input type="number" name="sharpen_amt" value="0.0" step="0.1" min="0.0" max="3.0">
+        </label>
+        <label>Sharpen σ
+          <input type="number" name="sharpen_sigma" value="1.0" step="0.1" min="0.3" max="3.0">
+        </label>
+      </div>
+
+      <div class="col">
+        <h4>פרמטרי GCODE</h4>
+        <label>Servo S_up
+          <input type="number" name="servo_up" value="30" min="0" max="255">
+        </label>
+        <label>Servo S_dn
+          <input type="number" name="servo_down" value="90" min="0" max="255">
+        </label>
+        <label>Dwell Up (ms)
+          <input type="number" name="dwell_up" value="80" min="0" max="5000" step="10">
+        </label>
+        <label>Dwell Down (ms)
+          <input type="number" name="dwell_down" value="120" min="0" max="5000" step="10">
+        </label>
+        <label>Feedrate (mm/min)
+          <input type="number" name="feedrate" value="3000" min="100" max="60000" step="100">
+        </label>
+      </div>
+    </fieldset>
+
+    <button class="btn" id="btnPreview" type="button">⚙️ צור תצוגה מקדימה</button>
+  </form>
+
+  <h2>🖼️ תצוגה מקדימה</h2>
+  <img id="preview" alt="preview" />
+
+  <h2>📦 הורדות</h2>
+  <button class="btn" id="btnSVG" disabled>⬇️ הורד SVG</button>
+  <button class="btn" id="btnCSV" disabled>⬇️ הורד CSV</button>
+  <button class="btn" id="btnGCODE" disabled>⬇️ הורד GCODE</button>
+
+  <script>
+    const frm = document.getElementById('frm');
+    const imgInput = document.getElementById('image');
+    const preview = document.getElementById('preview');
+    const btnPreview = document.getElementById('btnPreview');
+    const btnSVG = document.getElementById('btnSVG');
+    const btnCSV = document.getElementById('btnCSV');
+    const btnGCODE = document.getElementById('btnGCODE');
+
+    function buildFormData() {
+      const fd = new FormData(frm);
+      const minDia = parseFloat(fd.get('min_dia_mm')||'0.2');
+      const maxDia = parseFloat(fd.get('max_dia_mm')||'1.5');
+      if (maxDia < minDia) { fd.set('min_dia_mm', maxDia); fd.set('max_dia_mm', minDia); }
+      return fd;
+    }
+
+    async function postAndShow(url) {
+      const fd = buildFormData();
+      if (!imgInput.files.length) { alert('נא לבחור תמונה'); return; }
+      btnPreview.disabled = true;
+      try {
+        const res = await fetch(url, { method:'POST', body: fd });
+        if (!res.ok) throw new Error('HTTP '+res.status);
+        const blob = await res.blob();
+        preview.src = URL.createObjectURL(blob);
+        btnSVG.disabled = btnCSV.disabled = btnGCODE.disabled = false;
+      } catch (e) {
+        alert('שגיאה: ' + e.message);
+      } finally {
+        btnPreview.disabled = false;
+      }
+    }
+
+    btnPreview.addEventListener('click', () => postAndShow('/process'));
+
+    async function download(url, filename) {
+      const fd = buildFormData();
+      if (!imgInput.files.length) { alert('נא לבחור תמונה'); return; }
+      const res = await fetch(url, { method:'POST', body: fd });
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename || 'file';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(a.href);
+    }
+
+    btnSVG.addEventListener('click', () => download('/export/svg', 'stipple.svg'));
+    btnCSV.addEventListener('click', () => download('/export/csv', 'stipple.csv'));
+    btnGCODE.addEventListener('click', () => download('/export/gcode', 'stipple.gcode'));
+  </script>
+</body>
+</html>
